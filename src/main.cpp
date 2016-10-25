@@ -13,6 +13,9 @@
 #include <vector>
 #include <fcntl.h>
 #include <limits.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
 
 using namespace std;
 namespace po = boost::program_options;
@@ -34,8 +37,6 @@ struct container_options {
     int raw_argc;
 };
 
-void start_container(int argc, char * argv[]);
-
 
 #ifndef CLONE_NEWCGROUP         /* Added in Linux 4.6 */
 #define CLONE_NEWCGROUP         0x02000000
@@ -48,6 +49,8 @@ static char child_stack[STACK_SIZE];
 static int child_func(void *a);
 static container_options parse_arguments(int argc,  char * argv[]);
 void catcher(int signum);
+
+int write_data_to_socket(const string &msg) ;
 
 namespace boost {
   template<>
@@ -110,6 +113,8 @@ proc_setgroups_write(pid_t child_pid, const char *str)
 }
 
 int main(int argc,  char * argv[]) {
+    const char *notification_script = "notify_daemon.sh";
+
     container_options copts = parse_arguments(argc, argv);
 
     pid_t child_pid = clone(child_func, child_stack + STACK_SIZE,
@@ -120,6 +125,8 @@ int main(int argc,  char * argv[]) {
         errExit("clone");
 
     cout << child_pid << endl; // we want flush!
+
+    write_data_to_socket("start " + std::to_string(child_pid));
 
     if (copts.cpu_perc < 100 && copts.cpu_perc >= 0) {
         stringstream ss;
@@ -166,6 +173,48 @@ int main(int argc,  char * argv[]) {
     if (waitpid(child_pid, NULL, 0) == -1)
         errExit("waitpid");
 
+    stringstream stop_command;
+    stop_command << "./aucont_stop " << child_pid;
+    system(stop_command.str().c_str());
+
+    return 0;
+}
+
+int write_data_to_socket(const string &msg) {
+    int sockfd, portno, n;
+
+    struct sockaddr_in serv_addr;
+    struct hostent *server;
+
+    portno = 8007;
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0)
+        perror("ERROR opening socket");
+    server = gethostbyname("localhost");
+    if (server == NULL) {
+        fprintf(stderr,"ERROR, no such host\n");
+        exit(0);
+    }
+    bzero((char *) &serv_addr, sizeof(serv_addr));
+    serv_addr.sin_family = AF_INET;
+    bcopy((char *)server->h_addr,
+          (char *)&serv_addr.sin_addr.s_addr,
+          server->h_length);
+    serv_addr.sin_port = htons(portno);
+    if (connect(sockfd,(struct sockaddr *)&serv_addr,sizeof(serv_addr)) < 0)
+        perror("ERROR connecting");
+    n = write(sockfd,msg.c_str(),msg.size());
+    if (n < 0)
+        perror("ERROR writing to socket");
+
+    char buffer[256];
+    bzero(buffer,256);
+    n = read(sockfd,buffer,255);
+    if (n < 0)
+        perror("ERROR reading from socket");
+    if (strcmp(buffer, "OK")) {
+        cerr << "error sending information to daemon" << endl;
+    }
     return 0;
 }
 
@@ -260,8 +309,7 @@ int child_func(void *a)
     if (-1 == mount("/proc", mount_point, "proc", 0, NULL)) {
         errExit("mount");
     }
-
-
+    
     if (copts->is_daemon) {
         pid_t sid;
 
@@ -277,9 +325,6 @@ int child_func(void *a)
         close(STDERR_FILENO);
         umask(0);
     }
-
-   // setuid(0);
-   // setgid(0);
 
     unshare(CLONE_NEWCGROUP);
 
