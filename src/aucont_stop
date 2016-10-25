@@ -4,6 +4,7 @@ import signal
 import socket
 import os
 import sys
+import errno
 from subprocess import call
 
 def main():
@@ -13,6 +14,16 @@ def main():
 
     pid = sys.argv[1]
     sig = int(sys.argv[2]) if len(sys.argv) > 2 else signal.SIGTERM
+
+    try:
+        os.kill(int(pid), sig)
+    except OSError as e:
+        if errno.EPERM == e.errno:
+            print("Permission denied killing process. Maybe try with [sudo]?")
+            return
+    except Exception as e:
+        print(e)
+        return
 
     edsIP = "localhost"
     edsPORT = 8007
@@ -30,10 +41,6 @@ def main():
     if response != "OK":
         print(response)
     else:
-        try:
-            os.kill(int(pid), sig)
-        except:
-            pass
         if os.path.exists("/sys/fs/cgroup/cpu/aucont-{}".format(pid)):
             call(["cgdelete", "cpu:aucont-{}".format(pid)])
 

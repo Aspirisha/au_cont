@@ -117,6 +117,27 @@ int main(int argc,  char * argv[]) {
 
     container_options copts = parse_arguments(argc, argv);
 
+    if (copts.is_daemon) {
+
+        if (fork() != 0) {
+            exit(EXIT_SUCCESS);
+        } else {
+            pid_t sid;
+
+            sid = setsid(); // The process is now detached from its controlling terminal (CTTY).
+            if (sid < 0) {
+                errExit("Could not create process group");
+                return EXIT_FAILURE;
+            }
+
+            //Close Standard File Descriptors
+            close(STDIN_FILENO);
+            close(STDERR_FILENO);
+            umask(0);
+        }
+    }
+
+
     pid_t child_pid = clone(child_func, child_stack + STACK_SIZE,
                             CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWUSER |
                                     CLONE_NEWNS | CLONE_NEWCGROUP |
@@ -125,6 +146,7 @@ int main(int argc,  char * argv[]) {
         errExit("clone");
 
     cout << child_pid << endl; // we want flush!
+    close(STDOUT_FILENO);
 
     write_data_to_socket("start " + std::to_string(child_pid));
 
@@ -164,10 +186,6 @@ int main(int argc,  char * argv[]) {
 
     if (int e = kill(child_pid, SIGCONT)) {
         errExit(strerror(e));
-    }
-
-    if (copts.is_daemon) {
-        exit(EXIT_SUCCESS);
     }
 
     if (waitpid(child_pid, NULL, 0) == -1)
@@ -309,21 +327,9 @@ int child_func(void *a)
     if (-1 == mount("/proc", mount_point, "proc", 0, NULL)) {
         errExit("mount");
     }
-    
+
     if (copts->is_daemon) {
-        pid_t sid;
 
-        sid = setsid(); // The process is now detached from its controlling terminal (CTTY).
-        if (sid < 0) {
-            errExit("Could not create process group");
-            return EXIT_FAILURE;
-        }
-
-        //Close Standard File Descriptors
-        close(STDIN_FILENO);
-        close(STDOUT_FILENO);
-        close(STDERR_FILENO);
-        umask(0);
     }
 
     unshare(CLONE_NEWCGROUP);
