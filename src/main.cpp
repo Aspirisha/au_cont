@@ -7,9 +7,12 @@
 #include <sys/utsname.h>
 #include <fstream>
 #include <sys/stat.h>
+#include <sys/mount.h>
 #include <unistd.h>
 #include <signal.h>
 #include <vector>
+#include <fcntl.h>
+#include <limits.h>
 
 using namespace std;
 namespace po = boost::program_options;
@@ -51,21 +54,76 @@ namespace boost {
   std::string lexical_cast(const vector<string>& arg) { return ""; }
 }
 
+
+static void
+update_map(const string &mapping, const string &map_file)
+{
+    int fd = open(map_file.c_str(), O_RDWR);
+    if (fd == -1) {
+        fprintf(stderr, "ERROR: open %s: %s\n", map_file.c_str(),
+                strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    if (write(fd, mapping.c_str(), mapping.length()) != mapping.length()) {
+        fprintf(stderr, "ERROR: write %s: %s\n", map_file.c_str(),
+                strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    close(fd);
+}
+
+static void
+proc_setgroups_write(pid_t child_pid, const char *str)
+{
+    int fd;
+
+    stringstream setgroups_path;
+
+    setgroups_path << "/proc/" << child_pid << "/setgroups";
+
+    fd = open(setgroups_path.str().c_str(), O_RDWR);
+    if (fd == -1) {
+
+        /* We may be on a system that doesn't support
+           /proc/PID/setgroups. In that case, the file won't exist,
+           and the system won't impose the restrictions that Linux 3.19
+           added. That's fine: we don't need to do anything in order
+           to permit 'gid_map' to be updated.
+
+           However, if the error from open() was something other than
+           the ENOENT error that is expected for that case,  let the
+           user know. */
+
+        if (errno != ENOENT)
+            fprintf(stderr, "ERROR: open %s: %s\n", setgroups_path.str().c_str(),
+                    strerror(errno));
+        return;
+    }
+
+    if (write(fd, str, strlen(str)) == -1)
+        fprintf(stderr, "ERROR: write %s: %s\n", setgroups_path.str().c_str(),
+                strerror(errno));
+
+    close(fd);
+}
+
 int main(int argc,  char * argv[]) {
     container_options copts = parse_arguments(argc, argv);
 
     pid_t child_pid = clone(child_func, child_stack + STACK_SIZE,
                             CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWUSER |
+                                    CLONE_NEWNS | CLONE_NEWCGROUP |
                             SIGCHLD, &copts);
     if (child_pid == -1)
         errExit("clone");
 
     cout << child_pid << endl; // we want flush!
 
-    stringstream ss;
-    ss << "/sys/fs/cgroup/cpu/" << "aucont-" << child_pid;
-
     if (copts.cpu_perc < 100 && copts.cpu_perc >= 0) {
+        stringstream ss;
+        ss << "/sys/fs/cgroup/cpu/" << "aucont-" << child_pid;
         if (-1 == mkdir(ss.str().c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)) {
             errExit("mkdir");
         }
@@ -78,7 +136,25 @@ int main(int argc,  char * argv[]) {
         cpushare << copts.cpu_perc * 1024 / 100;
     }
 
-    sleep(2);
+    // mapping of uids and gids
+    stringstream mapping_file;
+    mapping_file << "/proc/" << child_pid << "/uid_map";
+    stringstream mapping;
+    mapping << "0 " << getuid() << " 1";
+    update_map(mapping.str().c_str(), mapping_file.str().c_str());
+
+    mapping_file.clear();
+    mapping_file.str(string());
+    mapping.clear();
+    mapping.str({});
+    proc_setgroups_write(child_pid, "deny");
+    mapping_file << "/proc/" << child_pid << "/gid_map";
+    mapping << "0 " << getgid() << " 1";
+    update_map(mapping.str().c_str(), mapping_file.str().c_str());
+
+
+    sleep(1);
+
     if (int e = kill(child_pid, SIGCONT)) {
         errExit(strerror(e));
     }
@@ -167,11 +243,24 @@ container_options parse_arguments(int argc,  char * argv[]) {
 int child_func(void *a)
 {
     const char *hostname = "container";
+    const char *mount_point = "/proc";
 
     container_options *copts = (container_options*)a;
 
+    if (chdir(copts->image_fs_path.c_str())) {
+        errExit("chdir");
+    }
+    if (chroot(copts->image_fs_path.c_str())) {
+        errExit("chroot");
+    }
+
     if (sethostname(hostname, strlen(hostname)) == -1)
         errExit("sethostname");
+
+    if (-1 == mount("/proc", mount_point, "proc", 0, NULL)) {
+        errExit("mount");
+    }
+
 
     if (copts->is_daemon) {
         pid_t sid;
@@ -182,15 +271,15 @@ int child_func(void *a)
             return EXIT_FAILURE;
         }
 
-        setuid(0);
-        setgid(0);
-
         //Close Standard File Descriptors
         close(STDIN_FILENO);
         close(STDOUT_FILENO);
         close(STDERR_FILENO);
         umask(0);
     }
+
+   // setuid(0);
+   // setgid(0);
 
     unshare(CLONE_NEWCGROUP);
 
@@ -209,7 +298,14 @@ int child_func(void *a)
             break;
     }
 
-    execv(copts->cmd_path.c_str(), copts->raw_argv + command_name_index + 1);
+    //pid_t task_pid = fork();
+  //  if (!task_pid) {
+        execv(copts->cmd_path.c_str(),
+              copts->raw_argv + command_name_index);
+    errExit("exec");
+   // } else {
+ //       waitpid(task_pid, 0, 0);
+   // }
     return 0;           /* Terminates child */
 }
 
