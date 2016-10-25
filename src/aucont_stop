@@ -1,3 +1,41 @@
-#!/bin/bash
+#!/usr/bin/python
 
-CUR_DIR=`dirname "$0"`
+import signal
+import socket
+import os
+import sys
+from subprocess import call
+
+def main():
+    if len(sys.argv) < 2:
+        print("Expect container ID as first argument")
+        return
+
+    pid = sys.argv[1]
+    sig = int(sys.argv[2]) if len(sys.argv) > 2 else signal.SIGTERM
+
+    edsIP = "localhost"
+    edsPORT = 8007
+    MESSAGE = "stop {}".format(pid) 
+    MAX_DATA_SIZE = 4096
+
+    srvsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srvsock.settimeout(3) # 3 second timeout on commands
+    srvsock.connect((edsIP, edsPORT))
+    srvsock.sendall(MESSAGE)
+
+    response = srvsock.recv(MAX_DATA_SIZE) 
+    srvsock.close()
+
+    if response != "OK":
+        print(response)
+    else:
+        try:
+            os.kill(int(pid), sig)
+        except:
+            pass
+        if os.path.exists("/sys/fs/cgroup/cpu/aucont-{}".format(pid)):
+            call(["cgdelete", "cpu:aucont-{}".format(pid)])
+
+if __name__ == '__main__':
+    main()

@@ -1,3 +1,23 @@
-#!/bin/bash
+#!/usr/bin/python
 
-CUR_DIR=`dirname "$0"`
+import socket
+
+def main():
+    edsIP = "localhost"
+    edsPORT = 8007
+    MESSAGE = "list"
+    MAX_DATA_SIZE = 4096
+
+    srvsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srvsock.settimeout(3) # 3 second timeout on commands
+    srvsock.connect((edsIP, edsPORT))
+    srvsock.sendall(MESSAGE)
+
+    data = srvsock.recv(MAX_DATA_SIZE) 
+    s = eval(data)
+    for x in s: 
+        print(x)
+    srvsock.close()
+
+if __name__ == '__main__':
+    main()

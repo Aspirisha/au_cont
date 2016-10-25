@@ -9,3 +9,5 @@ cp ../src/aucont_list ../bin
 cp ../src/aucont_stop ../bin
 cp ../src/aucont_exec ../bin
 cp ../src/aucontd ../bin
+cd ../bin
+twistd -y aucontd

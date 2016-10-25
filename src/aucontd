@@ -5,18 +5,40 @@ from twisted.internet import reactor
 from twisted.application import service
 
 class Server(Protocol):
-    def __init__(self):
-        self.running_containers = set()
-
     def dataReceived(self, data):
-        pid = int(data)
-        self.running_containers.add(pid)
-        self.transport.write(data)
+        commands = data.split(' ')
+        if commands[0] == "start":
+            pid = int(commands[1])
+            ServerFactory.running_containers.add(pid)
+            self.transport.write("OK")
+        elif commands[0] == "stop":
+            if len(commands) < 2:
+                self.transport.write("Container not specified")
+                return
+
+            if not commands[1].isdigit():
+                self.transport.write("Container id should be digit")
+                return
+
+            pid = int(commands[1])
+            if not pid in ServerFactory.running_containers:
+                self.transport.write("Container with pid {} is not running".format(pid))
+                return
+
+            ServerFactory.running_containers.remove(pid)
+            self.transport.write("OK")
+        elif commands[0] == "list":
+            self.transport.write(str(ServerFactory.running_containers))
+
+            
+
 
 class ServerFactory(Factory):
     protocol = Server
+    running_containers = set()
 
 class EchoService(service.Service):
+    
     def __init__(self, portNum):
         self.portNum = portNum
 
