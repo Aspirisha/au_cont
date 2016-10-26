@@ -6,7 +6,7 @@ find_package(Boost 1.55 REQUIRED COMPONENTS program_options)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 
 include_directories(${Boost_INCLUDE_DIRS})
-set(SOURCE_FILES main.cpp)
+set(SOURCE_FILES main.cpp daemon_interaction.h daemon_interaction.cpp)
 add_executable(aucont_start ${SOURCE_FILES})
 target_link_libraries(aucont_start ${Boost_LIBRARIES})
 

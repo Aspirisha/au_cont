@@ -17,6 +17,8 @@
 #include <netinet/in.h>
 #include <netdb.h>
 
+#include "daemon_interaction.h"
+
 using namespace std;
 namespace po = boost::program_options;
 
@@ -50,16 +52,13 @@ static int child_func(void *a);
 static container_options parse_arguments(int argc,  char * argv[]);
 void catcher(int signum);
 
-int write_data_to_socket(const string &msg) ;
 
-namespace boost {
-  template<>
-  std::string lexical_cast(const vector<string>& arg) { return ""; }
-}
+// this is needed since we want to have default argument value for CMD args as empty vector,
+// and hence boost should be able to print vector of strings somehow.
+// so, let it just ignore this
 
 
-static void
-update_map(const string &mapping, const string &map_file)
+static void update_map(const string &mapping, const string &map_file)
 {
     int fd = open(map_file.c_str(), O_RDWR);
     if (fd == -1) {
@@ -73,12 +72,13 @@ update_map(const string &mapping, const string &map_file)
                 strerror(errno));
         exit(EXIT_FAILURE);
     }
+  //  vector<string> v;
 
+  //  boost::lexical_cast<vector<string>>(v);
     close(fd);
 }
 
-static void
-proc_setgroups_write(pid_t child_pid, const char *str)
+static void proc_setgroups_write(pid_t child_pid, const char *str)
 {
     int fd;
 
@@ -112,32 +112,65 @@ proc_setgroups_write(pid_t child_pid, const char *str)
     close(fd);
 }
 
-int main(int argc,  char * argv[]) {
-    const char *notification_script = "notify_daemon.sh";
+void make_daemon() {
+    if (fork() != 0) {
+        exit(EXIT_SUCCESS);
+    }
+    pid_t sid;
 
+    sid = setsid(); // The process is now detached from its controlling terminal (CTTY).
+    if (sid < 0) {
+        errExit("setsid");
+    }
+
+    // Close Standard File Descriptors
+    // keep STDOUT for a while since we need to write child pid later on
+    close(STDIN_FILENO);
+    close(STDERR_FILENO);
+    umask(0);
+}
+
+static void map_uid(pid_t child_pid) {
+    stringstream mapping_file;
+    mapping_file << "/proc/" << child_pid << "/uid_map";
+    stringstream mapping;
+    mapping << "0 " << getuid() << " 1";
+    update_map(mapping.str().c_str(), mapping_file.str().c_str());
+}
+
+static void map_gid(pid_t child_pid) {
+    proc_setgroups_write(child_pid, "deny");
+
+    stringstream mapping_file;
+    mapping_file << "/proc/" << child_pid << "/gid_map";
+    stringstream mapping;
+    mapping << "0 " << getgid() << " 1";
+    update_map(mapping.str().c_str(), mapping_file.str().c_str());
+}
+
+static void put_to_cpu_cgroup(pid_t child_pid, int cpu_perc) {
+    stringstream ss;
+    ss << "/sys/fs/cgroup/cpu/" << "aucont-" << child_pid;
+    if (-1 == mkdir(ss.str().c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)) {
+        errExit("mkdir");
+    }
+
+    ofstream proc(ss.str() + "/cgroup.procs");
+    proc << child_pid << endl;
+    proc.close();
+
+    ofstream cpushare(ss.str() + "/cpu.shares");
+    cpushare << cpu_perc * 1024 / 100;
+}
+
+int main(int argc,  char * argv[]) {
     container_options copts = parse_arguments(argc, argv);
 
     if (copts.is_daemon) {
-
-        if (fork() != 0) {
-            exit(EXIT_SUCCESS);
-        } else {
-            pid_t sid;
-
-            sid = setsid(); // The process is now detached from its controlling terminal (CTTY).
-            if (sid < 0) {
-                errExit("Could not create process group");
-                return EXIT_FAILURE;
-            }
-
-            //Close Standard File Descriptors
-            close(STDIN_FILENO);
-            close(STDERR_FILENO);
-            umask(0);
-        }
+        make_daemon();
     }
 
-
+    // second fork, or better yet we just clone
     pid_t child_pid = clone(child_func, child_stack + STACK_SIZE,
                             CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWUSER |
                                     CLONE_NEWNS | CLONE_NEWCGROUP |
@@ -148,44 +181,27 @@ int main(int argc,  char * argv[]) {
     cout << child_pid << endl; // we want flush!
     close(STDOUT_FILENO);
 
-    write_data_to_socket("start " + std::to_string(child_pid));
+    DaemonInteractor di;
+    di.notify_start(child_pid, copts.is_daemon);
 
     if (copts.cpu_perc < 100 && copts.cpu_perc >= 0) {
-        stringstream ss;
-        ss << "/sys/fs/cgroup/cpu/" << "aucont-" << child_pid;
-        if (-1 == mkdir(ss.str().c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)) {
-            errExit("mkdir");
-        }
-
-        ofstream proc(ss.str() + "/cgroup.procs");
-        proc << child_pid << endl;
-        proc.close();
-
-        ofstream cpushare(ss.str() + "/cpu.shares");
-        cpushare << copts.cpu_perc * 1024 / 100;
+        put_to_cpu_cgroup(child_pid, copts.cpu_perc);
     }
 
     // mapping of uids and gids
-    stringstream mapping_file;
-    mapping_file << "/proc/" << child_pid << "/uid_map";
-    stringstream mapping;
-    mapping << "0 " << getuid() << " 1";
-    update_map(mapping.str().c_str(), mapping_file.str().c_str());
+    map_uid(child_pid);
+    map_gid(child_pid);
 
-    mapping_file.clear();
-    mapping_file.str(string());
-    mapping.clear();
-    mapping.str({});
-    proc_setgroups_write(child_pid, "deny");
-    mapping_file << "/proc/" << child_pid << "/gid_map";
-    mapping << "0 " << getgid() << " 1";
-    update_map(mapping.str().c_str(), mapping_file.str().c_str());
-
-
+    // maybe child needs time to setup signal
+    // and maybe not
     sleep(1);
 
     if (int e = kill(child_pid, SIGCONT)) {
         errExit(strerror(e));
+    }
+
+    if (copts.is_daemon) {
+        exit(EXIT_SUCCESS);
     }
 
     if (waitpid(child_pid, NULL, 0) == -1)
@@ -197,45 +213,6 @@ int main(int argc,  char * argv[]) {
 
     return 0;
 }
-
-int write_data_to_socket(const string &msg) {
-    int sockfd, portno, n;
-
-    struct sockaddr_in serv_addr;
-    struct hostent *server;
-
-    portno = 8007;
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd < 0)
-        perror("ERROR opening socket");
-    server = gethostbyname("localhost");
-    if (server == NULL) {
-        fprintf(stderr,"ERROR, no such host\n");
-        exit(0);
-    }
-    bzero((char *) &serv_addr, sizeof(serv_addr));
-    serv_addr.sin_family = AF_INET;
-    bcopy((char *)server->h_addr,
-          (char *)&serv_addr.sin_addr.s_addr,
-          server->h_length);
-    serv_addr.sin_port = htons(portno);
-    if (connect(sockfd,(struct sockaddr *)&serv_addr,sizeof(serv_addr)) < 0)
-        perror("ERROR connecting");
-    n = write(sockfd,msg.c_str(),msg.size());
-    if (n < 0)
-        perror("ERROR writing to socket");
-
-    char buffer[256];
-    bzero(buffer,256);
-    n = read(sockfd,buffer,255);
-    if (n < 0)
-        perror("ERROR reading from socket");
-    if (strcmp(buffer, "OK")) {
-        cerr << "error sending information to daemon" << endl;
-    }
-    return 0;
-}
-
 
 container_options parse_arguments(int argc,  char * argv[]) {
     const char * fs_option = "image-fs-root";
@@ -263,7 +240,7 @@ container_options parse_arguments(int argc,  char * argv[]) {
             (cmd_option, po::value<string>()->multitoken()->zero_tokens()->composing(),
              "Command path to run in container")
             (cmd_args_option, po::value<vector<string>>()->multitoken()
-                     ->zero_tokens()->composing()->default_value(vector<string>{}),
+                     ->zero_tokens()->composing()->default_value(vector<string>{}, ""),
              "Command arguments")
             ;
     po::positional_options_description p;
@@ -314,6 +291,12 @@ int child_func(void *a)
 
     container_options *copts = (container_options*)a;
 
+    if (copts->is_daemon) {
+        if (close(STDOUT_FILENO)) {
+            errExit("stdout close");
+        }
+    }
+
     if (chdir(copts->image_fs_path.c_str())) {
         errExit("chdir");
     }
@@ -321,17 +304,14 @@ int child_func(void *a)
         errExit("chroot");
     }
 
-    if (sethostname(hostname, strlen(hostname)) == -1)
+    if (sethostname(hostname, strlen(hostname)) == -1) {
         errExit("sethostname");
+    }
 
     if (-1 == mount("/proc", mount_point, "proc", 0, NULL)) {
         errExit("mount");
     }
-
-    if (copts->is_daemon) {
-
-    }
-
+    
     unshare(CLONE_NEWCGROUP);
 
     struct sigaction sigact;
