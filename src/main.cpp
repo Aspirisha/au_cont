@@ -1,21 +1,11 @@
 #include <iostream>
 #include <cstring>
 #include <boost/program_options.hpp>
-#include <string>
 #include <sys/wait.h>
-#include <iostream>
-#include <sys/utsname.h>
 #include <fstream>
 #include <sys/stat.h>
 #include <sys/mount.h>
-#include <unistd.h>
-#include <signal.h>
-#include <vector>
 #include <fcntl.h>
-#include <limits.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netdb.h>
 
 #include "daemon_interaction.h"
 
@@ -39,24 +29,12 @@ struct container_options {
     int raw_argc;
 };
 
-
-#ifndef CLONE_NEWCGROUP         /* Added in Linux 4.6 */
-#define CLONE_NEWCGROUP         0x02000000
-#endif
-
-
-#define STACK_SIZE (1024 * 1024)    /* Stack size for cloned child */
+static const int STACK_SIZE (1024 * 1024);    /* Stack size for cloned child */
 static char child_stack[STACK_SIZE];
 
 static int child_func(void *a);
 static container_options parse_arguments(int argc,  char * argv[]);
 void catcher(int signum);
-
-
-// this is needed since we want to have default argument value for CMD args as empty vector,
-// and hence boost should be able to print vector of strings somehow.
-// so, let it just ignore this
-
 
 static void update_map(const string &mapping, const string &map_file)
 {
@@ -72,9 +50,6 @@ static void update_map(const string &mapping, const string &map_file)
                 strerror(errno));
         exit(EXIT_FAILURE);
     }
-  //  vector<string> v;
-
-  //  boost::lexical_cast<vector<string>>(v);
     close(fd);
 }
 
@@ -173,8 +148,7 @@ int main(int argc,  char * argv[]) {
     // second fork, or better yet we just clone
     pid_t child_pid = clone(child_func, child_stack + STACK_SIZE,
                             CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWUSER |
-                                    CLONE_NEWNS | CLONE_NEWCGROUP |
-                            SIGCHLD, &copts);
+                                    CLONE_NEWNS | SIGCHLD, &copts);
     if (child_pid == -1)
         errExit("clone");
 
@@ -311,8 +285,6 @@ int child_func(void *a)
     if (-1 == mount("/proc", mount_point, "proc", 0, NULL)) {
         errExit("mount");
     }
-    
-    unshare(CLONE_NEWCGROUP);
 
     struct sigaction sigact;
 
