@@ -17,7 +17,6 @@ RUN groupadd dev && \
 
 RUN apt-get install -y cmake && \
     apt-get install -y libstdc++6 && \
-    apt-get install -y libboost-program-options-dev && \
     apt-get install -y python-twisted && \
     apt-get install -y cgroup-tools
 

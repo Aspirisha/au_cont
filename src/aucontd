@@ -3,13 +3,23 @@
 from twisted.internet.protocol import Factory, Protocol
 from twisted.internet import reactor
 from twisted.application import service
+from multiprocessing import Lock
+
+
+class ContainerDescription:
+    def __init__(self, pid, is_daemon):
+        self.pid = pid
+        self.is_daemon = is_daemon
 
 class Server(Protocol):
+    __MAX_NETWORK_ID = 1000
     def dataReceived(self, data):
         commands = data.split(' ')
         if commands[0] == "start":
             pid = int(commands[1])
-            ServerFactory.running_containers.add(pid)
+            is_daemon = int(commands[2])
+            ServerFactory.running_containers[pid] = ContainerDescription(
+                pid, is_daemon)
             self.transport.write("OK")
         elif commands[0] == "stop":
             if len(commands) < 2:
@@ -21,21 +31,32 @@ class Server(Protocol):
                 return
 
             pid = int(commands[1])
-            if not pid in ServerFactory.running_containers:
+            if not pid in ServerFactory.running_containers.keys():
                 self.transport.write("Container with pid {} is not running".format(pid))
                 return
 
-            ServerFactory.running_containers.remove(pid)
+            ServerFactory.running_containers.pop(pid)
             self.transport.write("OK")
         elif commands[0] == "list":
-            self.transport.write(str(ServerFactory.running_containers))
-
+            self.transport.write(str(ServerFactory.running_containers.keys()))
+        elif commands[0] == "new_net_id":
+            with ServerFactory.lock:
+                for i in range(Server.__MAX_NETWORK_ID):
+                    if i in ServerFactory.used_network_ids:
+                        continue
+                    self.transport.write(str(i))
+                    ServerFactory.used_network_ids.add(i)
+                    break
+                else:
+                    self.transport.write("-1")
             
 
 
 class ServerFactory(Factory):
     protocol = Server
-    running_containers = set()
+    running_containers = {}
+    used_network_ids = set()
+    lock = Lock()
 
 class EchoService(service.Service):
     
