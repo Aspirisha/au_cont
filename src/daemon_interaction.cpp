@@ -5,12 +5,14 @@
 #include <iostream>
 #include <sstream>
 #include "daemon_interaction.h"
+#include "aucont_util.h"
 
 using namespace std;
 
-void DaemonInteractor::notify_start(pid_t child_pid, bool is_daemon) {
+void DaemonInteractor::notify_start(pid_t child_pid, aucontutil::container_options &copt) {
     stringstream message;
-    message << "start " << child_pid << " " << int(is_daemon);
+    message << "start " << child_pid << " " << int(copt.is_daemon)
+        << " " << copt.image_fs_path << " " << copt.net_ns_id;
     InteractionError ierror = send_message(message.str());
 
     switch (ierror) {

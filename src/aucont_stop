@@ -35,17 +35,21 @@ def main():
     srvsock.connect((edsIP, edsPORT))
     srvsock.sendall(MESSAGE)
 
-    response = srvsock.recv(MAX_DATA_SIZE) 
-    srvsock.close()
+    response = srvsock.recv(MAX_DATA_SIZE).split(" ")
 
-    if response != "OK":
-        print(response)
+    if response[0] != "OK":
+        print(response[0])
     else:
         if os.path.exists("/sys/fs/cgroup/cpu/aucont-{}".format(pid)):
             call(["cgdelete", "cpu:aucont-{}".format(pid)])
-        # delete net ns if needed
-        # sudo ip netns delete aucontnet-3
-        # sudo ip link delete veth0-aucont-3
+        ns_id = response[1] 
+        if ns_id != "-1": # remove net ns
+            ns_name = 'aucontnet-{}'.format(ns_id)
+            veth_name = "veth0-aucont-{}".format(ns_id)
+            call(["ip", "netns", "delete", ns_name])
+            call(["ip", "link", "delete", veth_name])
+            srvsock.sendall("net_ns_deleted {}".format(ns_id))
+    srvsock.close()
 
 if __name__ == '__main__':
     main()

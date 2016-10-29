@@ -57,7 +57,7 @@ def main():
                     help='container file system root')
     parser.add_argument('cmd', type=str, 
                      help='Command to run in container')
-    parser.add_argument('args', nargs='?', default=[],
+    parser.add_argument('args', nargs='*',
                      help='Command arguments')
     args = parser.parse_args()
     
@@ -65,22 +65,25 @@ def main():
         print("Cpu percentage should be between 1 and 100")
         exit(1)
 
+    ns_id = -1
+    command = ""
     if args.ip is not None:
         ns_name = create_net_ns(args.ip)
-        command_prefix = "ip netns exec {} ".format(ns_name)
-    else:
-        command_prefix = ""
+        ns_id = ns_name.split("-")[1]
+        command = "ip netns exec {} ".format(ns_name)
 
-    command_suffix = "./__aucont_start {} {} {} {} {}".format(args.is_daemon, args.cpu_perc, 
-        args.fs_root, args.cmd, " ".join(args.args))
+    command += "./__aucont_start {} {} {} {} {}".format(args.is_daemon, args.cpu_perc, 
+        ns_id, args.fs_root, args.cmd)
     
-    command = command_prefix + command_suffix
+   
 
     command_list = command.strip().split(" ")
+    command_list.extend(args.args)
     if not args.is_daemon:
         subprocess.call(command_list)
     else:
-        pid = subprocess.Popen(command_list).pid
+        proc = subprocess.Popen(command_list)
+
 
 if __name__ == '__main__':
     main()

@@ -4,52 +4,87 @@ from twisted.internet.protocol import Factory, Protocol
 from twisted.internet import reactor
 from twisted.application import service
 from multiprocessing import Lock
-
+import pickle
 
 class ContainerDescription:
-    def __init__(self, pid, is_daemon):
+    def __init__(self, pid, is_daemon, image_root, net_ns_id):
         self.pid = pid
         self.is_daemon = is_daemon
+        self.image_root = image_root
+        self.net_ns_id = net_ns_id
+
 
 class Server(Protocol):
     __MAX_NETWORK_ID = 1000
     def dataReceived(self, data):
         commands = data.split(' ')
+
         if commands[0] == "start":
-            pid = int(commands[1])
-            is_daemon = int(commands[2])
-            ServerFactory.running_containers[pid] = ContainerDescription(
-                pid, is_daemon)
-            self.transport.write("OK")
+            self.__on_start(commands)
         elif commands[0] == "stop":
-            if len(commands) < 2:
-                self.transport.write("Container not specified")
-                return
-
-            if not commands[1].isdigit():
-                self.transport.write("Container id should be digit")
-                return
-
-            pid = int(commands[1])
-            if not pid in ServerFactory.running_containers.keys():
-                self.transport.write("Container with pid {} is not running".format(pid))
-                return
-
-            ServerFactory.running_containers.pop(pid)
-            self.transport.write("OK")
+            self.__on_stop(commands)
         elif commands[0] == "list":
             self.transport.write(str(ServerFactory.running_containers.keys()))
+        elif commands[0] == "describe":
+            self.__on_describe(commands)
         elif commands[0] == "new_net_id":
-            with ServerFactory.lock:
-                for i in range(Server.__MAX_NETWORK_ID):
-                    if i in ServerFactory.used_network_ids:
-                        continue
-                    self.transport.write(str(i))
-                    ServerFactory.used_network_ids.add(i)
-                    break
-                else:
-                    self.transport.write("-1")
-            
+            self.__on_new_net_id()
+        elif commands[0] == "net_ns_deleted":
+            self.used_network_ids.remove(int(commands[1]))
+
+
+    def __on_start(self, commands):
+        # start message format: 
+        # start <pid> <is_daemon> <image_root> <net-ns>
+        pid = int(commands[1])
+        is_daemon = int(commands[2])
+        img_root = commands[3]
+        net_ns_id = commands[4]
+
+        ServerFactory.running_containers[pid] = ContainerDescription(
+            pid, is_daemon, img_root, net_ns_id)
+        self.transport.write("OK")
+    
+
+    def __on_stop(self, commands):
+        if len(commands) < 2:
+            self.transport.write("Container not specified")
+            return
+
+        if not commands[1].isdigit():
+            self.transport.write("Container id should be digit")
+            return
+
+        pid = int(commands[1])
+        if not pid in ServerFactory.running_containers.keys():
+            self.transport.write("ERROR: Container with pid {} is not running".format(pid))
+            return
+
+        cont = ServerFactory.running_containers[pid]
+        ServerFactory.running_containers.pop(pid)
+        self.transport.write("OK {}".format(cont.net_ns_id))
+        
+
+    def __on_describe(self, commands):
+        cont_id = int(commands[1])
+        if cont_id not in ServerFactory.running_containers.keys():
+            self.transport.write("ERROR: Container with pid {} is not running".format(pid))
+            return
+        data = pickle.dumps(ServerFactory.running_containers[cont_id])
+        self.transport.write(data)
+
+
+    def __on_new_net_id(self):
+        with ServerFactory.lock:
+            for i in range(Server.__MAX_NETWORK_ID):
+                if i in ServerFactory.used_network_ids:
+                    continue
+                self.transport.write(str(i))
+                ServerFactory.used_network_ids.add(i)
+                break
+            else:
+                self.transport.write("-1")
+
 
 
 class ServerFactory(Factory):

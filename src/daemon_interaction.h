@@ -6,6 +6,8 @@
 #define AUCONT_DAEMON_INTERACTION_H
 
 #include <string>
+#include <iostream>
+#include "aucont_util.h"
 
 static const int DEFAULT_PORT = 8007;
 
@@ -19,10 +21,11 @@ enum class InteractionError {
     OK
 };
 
+
 class DaemonInteractor {
 public:
     DaemonInteractor(int daemon_port = DEFAULT_PORT) : port(daemon_port) {}
-    void notify_start(pid_t child_pid, bool is_daemon);
+    void notify_start(pid_t child_pid, aucontutil::container_options &copt);
 private:
     InteractionError send_message(const std::string &msg);
     int port;
