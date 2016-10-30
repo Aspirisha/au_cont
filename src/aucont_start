@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import sys
+import os
 import argparse
 import re
 import subprocess
@@ -72,7 +73,10 @@ def main():
         ns_id = ns_name.split("-")[1]
         command = "ip netns exec {} ".format(ns_name)
 
-    command += "./__aucont_start {} {} {} {} {}".format(args.is_daemon, args.cpu_perc, 
+    args.fs_root = os.path.realpath(args.fs_root)
+
+    path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "__aucont_start")
+    command += "{} {} {} {} {} {}".format(path, args.is_daemon, args.cpu_perc, 
         ns_id, args.fs_root, args.cmd)
     
    

@@ -12,15 +12,7 @@ set(AUC_START_SOURCE_FILES
         container_command.h
         container_command.cpp)
 
-set(AUC_EXEC_SOURCE_FILES
-        aucont_exec.cpp
-        aucont_util.cpp
-        aucont_util.h
-        container_command.cpp
-        container_command.h)
-
 add_executable(__aucont_start ${AUC_START_SOURCE_FILES})
-add_executable(__aucont_exec ${AUC_EXEC_SOURCE_FILES})
 
 message(${CMAKE_SOURCE_DIR})
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/../bin)

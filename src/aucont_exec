@@ -1,44 +1,18 @@
 #!/usr/bin/python
 
 import sys
-import socket
-import pickle 
-import re
+import subprocess
 
 def main():
     cont_id = sys.argv[1]
     cmd = sys.argv[2]
     args = sys.argv[3:]
 
-    edsIP = "localhost"
-    edsPORT = 8007
-    MESSAGE = "describe {}".format(cont_id) 
-    MAX_DATA_SIZE = 4096
+    command = "nsenter --target {} --preserve-credentials --mount --uts --pid --net --user --root --wd {}".format(cont_id, cmd)
+    command_list = command.split(" ")
+    command_list.extend(args)
 
-    srvsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    srvsock.settimeout(3) # 3 second timeout on commands
-    srvsock.connect((edsIP, edsPORT))
-    srvsock.sendall(MESSAGE)
-
-    response = srvsock.recv(MAX_DATA_SIZE)
-    srvsock.close()
-
-    print(response)
-    if re.match("^ERROR.*", response):
-        print(response)
-        return
-
-    cont_descr = pickle.loads(response)
-
-    command = ""
-    if cont_descr.net_ns_id != "-1":
-        ns_name = 'aucontnet-{}'.format(cont_descr.net_ns_id)
-        command = "ip netns exec {} ".format(ns_name)
-    command += "./__aucont_exec {} {} {} ".format(cont_descr.pid, 
-        cont_descr.image_root, 
-        cmd)
-
-    command += " ".join(args)
-    command_list = command.strip().split(" ")
-    print(command_list)
     subprocess.call(command_list)
+
+if __name__ == '__main__':
+    main()

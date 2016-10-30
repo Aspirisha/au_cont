@@ -3,8 +3,8 @@
 #include <sys/wait.h>
 #include <sstream>
 #include <sys/stat.h>
-#include <zconf.h>
 #include <fstream>
+#include <unistd.h>
 
 #include "daemon_interaction.h"
 #include "container_command.h"
@@ -64,7 +64,7 @@ int main(int argc,  char * argv[]) {
     // second fork, or better yet we just clone
     pid_t child_pid = clone(container_entry_point, child_stack + STACK_SIZE,
                             CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWUSER |
-                                    CLONE_NEWNS | SIGCHLD, &copts);
+                                    CLONE_NEWNS | CLONE_NEWNET | SIGCHLD, &copts);
     if (child_pid == -1)
         errExit("clone");
 

@@ -38,7 +38,7 @@ def main():
     response = srvsock.recv(MAX_DATA_SIZE).split(" ")
 
     if response[0] != "OK":
-        print(response[0])
+        print(" ".join(response))
     else:
         if os.path.exists("/sys/fs/cgroup/cpu/aucont-{}".format(pid)):
             call(["cgdelete", "cpu:aucont-{}".format(pid)])
