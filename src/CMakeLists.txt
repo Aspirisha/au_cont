@@ -13,6 +13,8 @@ set(AUC_START_SOURCE_FILES
         container_command.cpp)
 
 set(AUC_EXEC_SOURCE_FILES
+        aucont_util.h
+        aucont_util.cpp
         aucont_exec.cpp)
 
 add_executable(__aucont_start ${AUC_START_SOURCE_FILES})

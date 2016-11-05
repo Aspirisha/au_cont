@@ -50,6 +50,8 @@ class Server(Protocol):
     
 
     def __on_stop(self, commands):
+        # stop message format: 
+        # stop <pid>
         if len(commands) < 2:
             self.transport.write("Container not specified")
             return
@@ -69,6 +71,8 @@ class Server(Protocol):
         
 
     def __on_describe(self, commands):
+        # describe message format: 
+        # describe <pid>
         cont_id = int(commands[1])
         if cont_id not in ServerFactory.running_containers.keys():
             self.transport.write("ERROR: Container with pid {} is not running".format(pid))

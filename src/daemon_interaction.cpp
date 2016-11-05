@@ -5,7 +5,6 @@
 #include <iostream>
 #include <sstream>
 #include "daemon_interaction.h"
-#include "aucont_util.h"
 
 using namespace std;
 

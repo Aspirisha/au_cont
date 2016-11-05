@@ -95,7 +95,8 @@ namespace aucontutil
 
   string get_cpu_group_dir(int child_pid) {
       stringstream ss;
-      ss << "/sys/fs/cgroup/cpu/" << "aucont-" << child_pid;
+      // we should grant somehere that this directory is writeable for us
+      ss << "/sys/fs/cgroup/cpu/aucont/" << "aucont-" << child_pid;
 
       return ss.str();
   }
