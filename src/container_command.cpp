@@ -14,7 +14,8 @@ void catcher(int signum);
 int container_entry_point(void *a)
 {
     const char *hostname = "container";
-    const char *mount_point = "/proc";
+    const char *proc_mount_point = "/proc";
+    const char *sys_mount_point = "/sys";
 
     aucontutil::container_options *copts = (aucontutil::container_options*)a;
 
@@ -35,9 +36,14 @@ int container_entry_point(void *a)
         errExit("sethostname");
     }
 
-    aucontutil::create_directory_if_needed(mount_point);
-    if (-1 == mount("/proc", mount_point, "proc", 0, NULL)) {
-        errExit("mount");
+    aucontutil::create_directory_if_needed(proc_mount_point);
+    if (-1 == mount("/proc", proc_mount_point, "proc", 0, NULL)) {
+        errExit("mount proc");
+    }
+
+    aucontutil::create_directory_if_needed(sys_mount_point);
+    if (-1 == mount("/sys", sys_mount_point, "sysfs", 0, NULL)) {
+        errExit("mount sys");
     }
 
     struct sigaction sigact;

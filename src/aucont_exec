@@ -2,14 +2,31 @@
 
 import sys
 import subprocess
+import socket
+import os
 
 def main():
     cont_id = sys.argv[1]
     cmd = sys.argv[2]
     args = sys.argv[3:]
 
-    command = "nsenter --target {} --preserve-credentials --mount --uts --pid --net --user --root --wd {}".format(cont_id, cmd)
-    command_list = command.split(" ")
+    edsIP = "localhost"
+    edsPORT = 8007
+    MESSAGE = "describe {}".format(cont_id)
+    MAX_DATA_SIZE = 4096
+
+    srvsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srvsock.settimeout(3) # 3 second timeout on commands
+    srvsock.connect((edsIP, edsPORT))
+    srvsock.sendall(MESSAGE)
+
+    response = srvsock.recv(MAX_DATA_SIZE) 
+    srvsock.close()
+
+    image_root = response.split(" ")[2]
+
+    path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "__aucont_exec")
+    command_list = [path, cont_id, image_root, cmd]
     command_list.extend(args)
 
     subprocess.call(command_list)

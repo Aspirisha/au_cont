@@ -44,6 +44,22 @@ static string create_cpu_group(pid_t child_pid, int cpu_perc) {
     return group_dir;
 }
 
+static void stop_container(pid_t child_pid) {
+    const int MAX_PATH_SIZE = 256;
+
+
+    char buf[MAX_PATH_SIZE] = {0};
+    readlink("/proc/self/exe", buf, MAX_PATH_SIZE - 1);
+    string start_command_str(buf);
+
+    string::size_type last_slash = start_command_str.find_last_of('/');
+    buf[last_slash] = 0;
+
+    stringstream stop_command;
+    stop_command << buf << "/aucont_stop " << child_pid;
+    system(stop_command.str().c_str());
+}
+
 int main(int argc,  char * argv[]) {
 
     if (argc < 4) {
@@ -64,7 +80,7 @@ int main(int argc,  char * argv[]) {
     // second fork, or better yet we just clone
     pid_t child_pid = clone(container_entry_point, child_stack + STACK_SIZE,
                             CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWUSER |
-                                    CLONE_NEWNS | CLONE_NEWNET | SIGCHLD, &copts);
+                                    CLONE_NEWNS | CLONE_NEWNET | CLONE_NEWIPC | SIGCHLD, &copts);
     if (child_pid == -1)
         errExit("clone");
 
@@ -101,9 +117,7 @@ int main(int argc,  char * argv[]) {
     if (waitpid(child_pid, NULL, 0) == -1)
         errExit("waitpid");
 
-    stringstream stop_command;
-    stop_command << "./aucont_stop " << child_pid;
-    system(stop_command.str().c_str());
-
+    stop_container(child_pid);
+    
     return 0;
 }
