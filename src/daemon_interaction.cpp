@@ -9,32 +9,13 @@
 using namespace std;
 
 void DaemonInteractor::notify_start(pid_t child_pid, aucontutil::container_options &copt) {
-    stringstream message;
-    message << "start " << child_pid << " " << int(copt.is_daemon)
-        << " " << copt.image_fs_path << " " << copt.net_ns_id;
-    InteractionError ierror = send_message(message.str());
+    char message[1000];
 
-    switch (ierror) {
-        case InteractionError::ERR_SOCKET_OPEN:
-            cerr << "ERROR opening socket\n";
-            exit(EXIT_FAILURE);
-        case InteractionError::ERR_HOST_NOT_FOUND:
-            cerr << "ERROR no such host\n";
-            exit(EXIT_FAILURE);
-        case InteractionError::ERR_CONNECTION:
-            cerr << "ERROR connecting\n";
-            exit(EXIT_FAILURE);
-        case InteractionError::ERR_WRITE:
-            cerr << "ERROR writing to socket\n";
-            exit(EXIT_FAILURE);
-        case InteractionError::ERR_READ:
-            cerr << "ERROR reading from socket\n";
-            exit(EXIT_FAILURE);
-        case InteractionError::ERR_RESPONSE_NOT_OK:
-            cerr << "daemon internal error" << endl;
-            exit(EXIT_FAILURE);
-        case InteractionError::OK:break;
-    }
+    sprintf(message, "start %i %i %s %i %i %s", child_pid, int(copt.is_daemon),
+            copt.image_fs_path.c_str(), copt.net_ns_id, copt.cpu_perc, copt.cont_ip.c_str());
+
+    InteractionError ierror = send_message(message);
+    describe_error(ierror);
 }
 
 InteractionError DaemonInteractor::send_message(const string &msg) {
@@ -87,3 +68,38 @@ InteractionError DaemonInteractor::send_message(const string &msg) {
     }
     return InteractionError::OK;
 }
+
+void DaemonInteractor::notify_exec(pid_t child_pid, const char *cont_id) {
+    stringstream message;
+    message << "exec " << child_pid << " " << cont_id;
+    InteractionError ierror = send_message(message.str());
+    describe_error(ierror);
+}
+
+void DaemonInteractor::describe_error(InteractionError e) {
+    switch (e) {
+        case InteractionError::ERR_SOCKET_OPEN:
+            cerr << "ERROR opening socket\n";
+            exit(EXIT_FAILURE);
+        case InteractionError::ERR_HOST_NOT_FOUND:
+            cerr << "ERROR no such host\n";
+            exit(EXIT_FAILURE);
+        case InteractionError::ERR_CONNECTION:
+            cerr << "ERROR connecting\n";
+            exit(EXIT_FAILURE);
+        case InteractionError::ERR_WRITE:
+            cerr << "ERROR writing to socket\n";
+            exit(EXIT_FAILURE);
+        case InteractionError::ERR_READ:
+            cerr << "ERROR reading from socket\n";
+            exit(EXIT_FAILURE);
+        case InteractionError::ERR_RESPONSE_NOT_OK:
+            cerr << "daemon internal error" << endl;
+            exit(EXIT_FAILURE);
+        case InteractionError::OK:break;
+    }
+}
+
+
+
+

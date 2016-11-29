@@ -6,6 +6,6 @@ USER root
 
 RUN apt-get install -y cmake && \
     apt-get install -y python-twisted && \
-    apt-get install -y cgroup-tools
-
+    apt-get install -y cgroup-tools && \
+    apt-get install -y iptables
 USER dev

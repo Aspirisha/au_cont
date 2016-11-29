@@ -20,9 +20,9 @@ int container_entry_point(void *a)
     aucontutil::container_options *copts = (aucontutil::container_options*)a;
 
     if (copts->is_daemon) {
-        if (close(STDOUT_FILENO)) {
-            errExit("stdout close");
-        }
+        close(STDOUT_FILENO);
+        close(STDIN_FILENO);
+        close(STDERR_FILENO);
     }
 
     if (chdir(copts->image_fs_path.c_str())) {
@@ -46,19 +46,16 @@ int container_entry_point(void *a)
         errExit("mount sys");
     }
 
-    struct sigaction sigact;
+    // synchronization read
+    char dummy[1];
+    read(copts->pipe_fd, dummy, 1);
 
-    sigemptyset(&sigact.sa_mask);
-    sigact.sa_flags = 0;
-    sigact.sa_handler = catcher;
-    sigaction(SIGCONT, &sigact, NULL);
-
-    pause();
+    if (copts->net_ns_id != -1) {
+        aucontutil::setup_cont_network(*copts);
+    }
 
     execv(copts->cmd_argv[0], copts->cmd_argv);
 
     errExit("exec");
     return 0;           /* Terminates child */
 }
-
-void catcher(int signum) { }

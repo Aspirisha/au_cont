@@ -18,4 +18,4 @@ cd ../bin
 #
 # this is only to make tests pass as they are
 # IRL it shouldn't be called from build script
-twistd -y ../bin/aucontd
+sudo twistd -y ../bin/aucontd

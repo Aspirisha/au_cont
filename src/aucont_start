@@ -6,6 +6,10 @@ import argparse
 import re
 import subprocess
 import socket
+import getpass
+
+def get_aucont_binary_path(local_path):
+    return os.path.join(os.path.dirname(os.path.realpath(__file__)), local_path)
 
 def create_net_ns(ip):
     if not re.match("^((\d{1,3}\.){3})(\d{1,3})$", ip):
@@ -31,17 +35,14 @@ def create_net_ns(ip):
     srvsock.connect((edsIP, edsPORT))
     srvsock.sendall(MESSAGE)
 
-    response = srvsock.recv(MAX_DATA_SIZE) 
+    ns_id = srvsock.recv(MAX_DATA_SIZE) 
     srvsock.close()
 
-    if response == -1:
+    if ns_id == -1:
         print("Could not create new network namespace")
         exit(1)
 
-    ns_name = 'aucontnet-{}'.format(response)
-    ret_code = subprocess.call(["./__setup_network.sh", ip, ns_name])
-
-    return ns_name
+    return "aucontnet-{}".format(ns_id)
 
 
 def main():
@@ -53,7 +54,7 @@ def main():
                         help='cpu percentage available for new container')
     parser.add_argument('--net', dest='ip',
                          type=str, help='put container into separate network' 
-                         ' namespace and assign ip address to it')
+                         ' namespace and assign ip address to it', default="")
     parser.add_argument('fs_root',  metavar="FS_ROOT",
                     help='container file system root')
     parser.add_argument('cmd', type=str, 
@@ -68,19 +69,17 @@ def main():
 
     ns_id = -1
     command = ""
-    if args.ip is not None:
+    if args.ip:
         ns_name = create_net_ns(args.ip)
         ns_id = ns_name.split("-")[1]
-        command = "ip netns exec {} ".format(ns_name)
+        user_name = getpass.getuser()
 
     args.fs_root = os.path.realpath(args.fs_root)
 
-    path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "__aucont_start")
-    command += "{} {} {} {} {} {}".format(path, args.is_daemon, args.cpu_perc, 
-        ns_id, args.fs_root, args.cmd)
+    path = get_aucont_binary_path("__aucont_start")
+    command += "{} {} {} {} {} {} {}".format(path, args.is_daemon, args.cpu_perc, 
+        ns_id, args.ip, args.fs_root, args.cmd)
     
-   
-
     command_list = command.strip().split(" ")
     command_list.extend(args.args)
     if not args.is_daemon:
