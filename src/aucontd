@@ -49,8 +49,6 @@ class Server(Protocol):
             self.__on_describe(commands)
         elif commands[0] == "new_net_id":
             self.__on_new_net_id()
-        elif commands[0] == "net_ns_deleted":
-            ServerFactory.used_network_ids.remove(int(commands[1]))
 
     def __on_start(self, commands):
         # start message format: 
@@ -58,7 +56,7 @@ class Server(Protocol):
         pid = int(commands[1])
         is_daemon = int(commands[2])
         img_root = commands[3]
-        net_ns_id = commands[4]
+        net_ns_id = int(commands[4])
         cpu_perc = int(commands[5])
         ip = commands[6]
 
@@ -76,7 +74,7 @@ class Server(Protocol):
 
         if net_ns_id != -1:
             subprocess.call([get_aucont_binary_path("__setup_network.sh"), 
-                "host", ip, net_ns_id])
+                "host", ip, str(net_ns_id), str(pid)])
 
         ServerFactory.running_containers[pid] = ContainerDescription(
             pid, is_daemon, img_root, net_ns_id, cpu_perc)
@@ -101,6 +99,12 @@ class Server(Protocol):
 
         cont = ServerFactory.running_containers[pid]
         ServerFactory.running_containers.pop(pid)
+
+        if cont.net_ns_id != -1:
+            veth_name = "veth0-aucont-{}".format(cont.net_ns_id)
+            subprocess.call(["ip", "link", "delete", veth_name])
+            ServerFactory.used_network_ids.remove(cont.net_ns_id)
+
         self.transport.write("OK {}".format(cont.net_ns_id))
         
 
@@ -163,4 +167,3 @@ class EchoService(service.Service):
 application = service.Application("Demo application")
 service = EchoService(8007)
 service.setServiceParent(application)
-

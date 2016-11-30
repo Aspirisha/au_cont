@@ -1,12 +1,10 @@
 #!/usr/bin/python
 
-import sys
 import os
 import argparse
 import re
 import subprocess
 import socket
-import getpass
 
 def get_aucont_binary_path(local_path):
     return os.path.join(os.path.dirname(os.path.realpath(__file__)), local_path)
@@ -42,7 +40,7 @@ def create_net_ns(ip):
         print("Could not create new network namespace")
         exit(1)
 
-    return "aucontnet-{}".format(ns_id)
+    return ns_id
 
 
 def main():
@@ -68,16 +66,13 @@ def main():
         exit(1)
 
     ns_id = -1
-    command = ""
     if args.ip:
-        ns_name = create_net_ns(args.ip)
-        ns_id = ns_name.split("-")[1]
-        user_name = getpass.getuser()
+        ns_id = create_net_ns(args.ip)
 
     args.fs_root = os.path.realpath(args.fs_root)
 
     path = get_aucont_binary_path("__aucont_start")
-    command += "{} {} {} {} {} {} {}".format(path, args.is_daemon, args.cpu_perc, 
+    command = "{} {} {} {} {} {} {}".format(path, args.is_daemon, args.cpu_perc, 
         ns_id, args.ip, args.fs_root, args.cmd)
     
     command_list = command.strip().split(" ")

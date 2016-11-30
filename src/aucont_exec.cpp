@@ -1,12 +1,8 @@
 #include <iostream>
-#include <sched.h>
 #include <fcntl.h>
 #include <vector>
 #include <sstream>
 #include <unistd.h>
-#include <sys/stat.h>
-#include <fstream>
-#include "aucont_util.h"
 #include "daemon_interaction.h"
 
 
@@ -53,7 +49,6 @@ int main(int argc, char **argv) {
     }
 
     if (pid != 0) { // parent exits
-        //aucontutil::put_to_cpu_cgroup(pid, container_id);
         DaemonInteractor di;
         di.notify_exec(pid, container_id);
         return 0;

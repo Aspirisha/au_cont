@@ -8,7 +8,7 @@
 
 using namespace std;
 
-void DaemonInteractor::notify_start(pid_t child_pid, aucontutil::container_options &copt) {
+void DaemonInteractor::notify_start(pid_t child_pid, container_options &copt) {
     char message[1000];
 
     sprintf(message, "start %i %i %s %i %i %s", child_pid, int(copt.is_daemon),

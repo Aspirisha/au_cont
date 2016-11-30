@@ -39,16 +39,6 @@ def main():
 
     if response[0] != "OK":
         print(" ".join(response))
-    else:
-        if os.path.exists("/sys/fs/cgroup/cpu/aucont-{}".format(pid)):
-            call(["sudo", "cgdelete", "cpu:aucont-{}".format(pid)])
-        ns_id = response[1] 
-        if ns_id != "-1": # remove net ns
-            ns_name = 'aucontnet-{}'.format(ns_id)
-            veth_name = "veth0-aucont-{}".format(ns_id)
-            call(["ip", "netns", "delete", ns_name])
-            call(["ip", "link", "delete", veth_name])
-            srvsock.sendall("net_ns_deleted {}".format(ns_id))
     srvsock.close()
 
 if __name__ == '__main__':

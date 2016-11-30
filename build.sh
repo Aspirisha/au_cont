@@ -18,4 +18,8 @@ cd ../bin
 #
 # this is only to make tests pass as they are
 # IRL it shouldn't be called from build script
+echo "/=========================================================================\\"
+echo "| Now you'll be prompted to enter your sudo password. This is done        |"
+echo "| intentionally, the daemon for aucont needs to run with sudo privileges. |"
+echo "\=========================================================================/"
 sudo twistd -y ../bin/aucontd

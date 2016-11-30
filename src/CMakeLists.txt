@@ -7,14 +7,12 @@ set(AUC_START_SOURCE_FILES
         aucont_start.cpp
         daemon_interaction.h
         daemon_interaction.cpp
-        aucont_util.h
-        aucont_util.cpp
-        container_command.h
-        container_command.cpp)
+        host.h
+        host.cpp
+        container.h
+        container.cpp common.h common.cpp)
 
 set(AUC_EXEC_SOURCE_FILES
-        aucont_util.h
-        aucont_util.cpp
         daemon_interaction.h
         daemon_interaction.cpp
         aucont_exec.cpp)

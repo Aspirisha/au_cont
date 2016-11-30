@@ -7,8 +7,8 @@
 #include <unistd.h>
 
 #include "daemon_interaction.h"
-#include "container_command.h"
-#include "aucont_util.h"
+#include "container.h"
+#include "common.h"
 
 using namespace std;
 
@@ -24,9 +24,8 @@ static void make_daemon() {
        default:
            exit(EXIT_SUCCESS);
     }
-    pid_t sid = setsid(); // The process is now detached from its controlling terminal (CTTY).
 
-    if (sid < 0) {
+    if (setsid() < 0) {  // The process is now detached from its controlling terminal (CTTY).
         errExit("setsid");
     }
     umask(0);
@@ -34,7 +33,7 @@ static void make_daemon() {
 
 static void stop_container(pid_t child_pid) {
     stringstream stop_command;
-    stop_command << aucontutil::get_installation_dir() << "/aucont_stop " << child_pid;
+    stop_command << get_installation_dir() << "/aucont_stop " << child_pid;
     string str = stop_command.str();
     system(str.c_str());
 }
@@ -44,11 +43,11 @@ int main(int argc,  char * argv[]) {
         errExit("argc");
     }
 
-    aucontutil::container_options copts;
+    container_options copts;
     copts.is_daemon = !strcmp(argv[1], "1");
     copts.cpu_perc = atoi(argv[2]);
     copts.net_ns_id = atoi(argv[3]);
-    copts.cont_ip = atoi(argv[4]);
+    copts.cont_ip = argv[4];
     copts.image_fs_path = argv[5];
     copts.cmd_argv = argv + 6;
 
@@ -72,18 +71,14 @@ int main(int argc,  char * argv[]) {
 
     cout << child_pid << endl; // we want flush!
 
-    if (copts.net_ns_id != -1) {
-        //aucontutil::setup_host_network(copts);
-    }
     DaemonInteractor di;
 
     // blocks until we receive response from daemon,
-    // so when subroutine returns, everything is setup for container to run
     di.notify_start(child_pid, copts);
 
     // mapping of uids and gids
-    aucontutil::map_uid(child_pid);
-    aucontutil::map_gid(child_pid);
+    map_uid(child_pid);
+    map_gid(child_pid);
 
     write(pipe_fds[1], "1", 1);
 
@@ -91,8 +86,9 @@ int main(int argc,  char * argv[]) {
         exit(EXIT_SUCCESS);
     }
 
-    if (waitpid(child_pid, NULL, 0) == -1)
+    if (waitpid(child_pid, NULL, 0) == -1) {
         errExit("waitpid");
+    }
 
     stop_container(child_pid);
 
